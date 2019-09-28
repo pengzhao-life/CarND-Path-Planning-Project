@@ -100,40 +100,78 @@ int main() {
             car_s = end_path_s;
           }
 
-          bool too_close = false;
+          // Prediction: 
 
-          // find ref_v to use
+          bool car_ahead = false;
+          bool car_left = false;
+          bool car_right = false;
+
           for(int i =0; i < sensor_fusion.size(); i++){
-            // car is in my lane
+            // check any car ahead, or on left or right of our car
             float d = sensor_fusion[i][6];
-            if(d < (2+4*lane+2) && d > (2+4*lane-2)){
-              double vx = sensor_fusion[i][3];
-              double vy = sensor_fusion[i][4];
-              double check_speed = sqrt(vx*vx + vy*vy);
-              double check_car_s = sensor_fusion[i][5];
+            int other_car_in_lane = 1;
+            if (d > 0 && d < 4){
+              other_car_in_lane = 0;
+            }else if(d > 4 && d < 8){
+              other_car_in_lane = 1;
+            }else if(d > 8 && d < 12){
+              other_car_in_lane = 2;
+            }else {
+              continue;
+            }
 
-              check_car_s += (double)(prev_size * 0.02 * check_speed);// if using previous points can project s value out
-              //check s values greater than mine and s gap
-              if((check_car_s > car_s) && ((check_car_s - car_s)< 30)){
-                // do some logic here, lower reference velocity so we don't crash into the car in front of us, 
-                // could also flat to try to change lanes
-                too_close = true;
-                if(lane >0){
-                  lane = 0;
-                }
+            // get info for this neighbor car
+            double vx = sensor_fusion[i][3];
+            double vy = sensor_fusion[i][4];
+            double check_speed = sqrt(vx*vx + vy*vy);
+            double check_car_s = sensor_fusion[i][5];
+            check_car_s += (double)(prev_size * 0.02 * check_speed);
+
+            // analyze each neight car
+            if (other_car_in_lane == lane){
+              // same lane
+              // the car is in front of our car, with close distance. 
+              if(check_car_s > car_s && check_car_s - car_s < 30){
+                car_ahead = true;
+              }
+            }else if(other_car_in_lane == lane -1){
+              // the car is on left lane, closely ahead or behind of our car
+              if(car_s - 30 < check_car_s && car_s + 30 > check_car_s){
+                car_left = true;
+              }
+
+            }else if(other_car_in_lane == lane +1){
+              // the car is on right lane, closely ahead or behind of our car
+              if(car_s - 30 < check_car_s && car_s + 30 > check_car_s){
+                car_right = true;
               }
             }
           }
 
-          if(too_close){
-            ref_vel -= 0.224;
-          }else if(ref_vel < 49.5){
-            ref_vel += 0.224;
-          }
-
-
-
           
+          if (car_ahead){
+            // a car ahead
+            if(!car_left && lane > 0){
+              // no car on left, so change to left lane
+              lane--;
+            }else if(!car_right && lane < 2){
+              // no car on right, so change to right lane 
+              lane++;
+            }else {
+              // stay in same lane, and slow down
+              ref_vel -= 0.224;
+            }
+          }else {
+            if((lane == 0 && !car_right) || (lane==2 && !car_left)){
+              lane = 1;
+            }
+          if(ref_vel+0.224 < 49.5){
+                ref_vel += 0.224;
+            }
+          }
+          
+          // Trajectory: Use prevous path to make transition smoothy.
+
           // Create a list of widely spaced (x,y) waypoints, evenly spaced at 30m
           // Later we will interpolate these waypoints with a spline and fill it in with more points that control speed
           vector<double> ptsx;
@@ -145,12 +183,6 @@ int main() {
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
           
-
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
-
           // if previous size is almost empty, use the car as starting reference
           if(prev_size < 2) {
             double prev_car_x = car_x - cos(car_yaw);
@@ -245,8 +277,6 @@ int main() {
 
             next_x_vals.push_back(x_point);
             next_y_vals.push_back(y_point);
-
-
           }
 
           json msgJson;
