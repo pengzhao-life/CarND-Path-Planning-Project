@@ -165,6 +165,12 @@ int main() {
             if((lane == 0 && !car_right) || (lane==2 && !car_left)){
               lane = 1;
             }
+            // change to left lane if possible
+            // This works fine, but it makes car stay in the most left lane most of the time. We'd better not to hog the passing lane
+            // Therefore use line 165-167, rather than line 171-173.
+            // if(!car_left && (lane==1 || lane==2)){
+            //   lane--;
+            // }
           if(ref_vel+0.224 < 49.5){
                 ref_vel += 0.224;
             }
